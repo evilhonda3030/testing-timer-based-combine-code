@@ -6,6 +6,7 @@
 //
 
 import Combine
+import CombineExt
 import CombineSchedulers
 import Foundation
 
@@ -14,7 +15,7 @@ protocol FreshDataProvider: AnyObject {
 }
 
 protocol ApiRequestPerformer: AnyObject {
-    func request() -> AnyPublisher<Int, Error>
+    func request() -> AnyPublisher<Int, Never>
 }
 
 /// What do we know on how we can determine whether the data received from served is up to date?
@@ -53,18 +54,28 @@ final class FreshDataProviderImpl: FreshDataProvider {
     // MARK: - Public methods
 
     func freshData() -> AnyPublisher<Int, Never> {
-        var cachedSuccessfullResponse: Int?
+        var cachedSegment: Int = nowDateProviding.now.currentSegment()
+
+        let requestAndCache: () -> AnyPublisher<Int, Never> = { [apiRequestPerformer] in
+            apiRequestPerformer.request()
+                .handleEvents(receiveOutput: { cachedSegment = $0 })
+                .eraseToAnyPublisher()
+        }
 
         return Publishers
             .firingEveryTenMinutesOfHourTimer(
                 scheduler: timerScheduler,
                 nowDateProviding: nowDateProviding
             )
-            .flatMap { [apiRequestPerformer] in
-                apiRequestPerformer.request()
-                    .handleEvents(receiveOutput: { cachedSuccessfullResponse = $0 })
-                    .replaceError(with: cachedSuccessfullResponse ?? 0)
+            .flatMapLatest { [nowDateProviding, timerScheduler] in
+                requestAndCache()
+                    .checkSegmentOnRelevanceAndRetryIfNeeded(
+                        cachedSegment,
+                        nowDateProviding: nowDateProviding,
+                        scheduler: timerScheduler
+                    )
             }
+            .prepend(cachedSegment)
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
@@ -74,6 +85,32 @@ final class FreshDataProviderImpl: FreshDataProvider {
     private let apiRequestPerformer: ApiRequestPerformer
     private let timerScheduler: AnySchedulerOf<DispatchQueue>
     private let nowDateProviding: NowDateProviding.Type
+}
+
+private enum RelevanceError: Error {
+    case outdatedSegment
+}
+
+private extension Publisher where Output == Int, Failure == Never {
+    func checkSegmentOnRelevanceAndRetryIfNeeded(
+        _ cache: Int?,
+        nowDateProviding: NowDateProviding.Type,
+        scheduler: AnySchedulerOf<DispatchQueue>
+    ) -> AnyPublisher<Int, Never> {
+        self
+            .tryMap { responseSegment in
+                let currentSegment = nowDateProviding.now.currentSegment()
+                if responseSegment >= currentSegment {
+                    return responseSegment
+                } else {
+                    throw RelevanceError.outdatedSegment
+                }
+            }
+            .retry(20, withDelay: 30, scheduler: scheduler)
+            .replaceError(with: cache)
+            .compactMap { $0 }
+            .eraseToAnyPublisher()
+    }
 }
 
 private extension Publishers {
@@ -117,6 +154,10 @@ private extension Date {
         let hours = timestamp / .hour
         return timestamp - (hours * .hour)
     }
+
+    func currentSegment() -> Int {
+        elapsedSecondsFromTheBeginningOfHour().currentSegment
+    }
 }
 
 private extension Int {
@@ -133,4 +174,21 @@ private extension Int {
 private extension TimeInterval {
     static let minute: TimeInterval = 60.0
     static let hour = TimeInterval(Int(60.0 * minute))
+}
+
+private extension Publisher {
+    func retry<T, E>(
+        _ retries: Int,
+        withDelay delay: Int,
+        scheduler: AnySchedulerOf<DispatchQueue>
+    ) -> Publishers.TryCatch<Self, AnyPublisher<T, E>>
+    where T == Self.Output, E == Self.Failure {
+        tryCatch { error -> AnyPublisher<T, E> in
+            Just(Void())
+                .delay(for: .seconds(delay), scheduler: scheduler)
+                .flatMap { self }
+                .retry(retries)
+                .eraseToAnyPublisher()
+        }
+    }
 }

@@ -18,6 +18,7 @@
 		715F42D8297C406E003DD749 /* TDD_Async_Combine_And_TimersUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715F42D7297C406E003DD749 /* TDD_Async_Combine_And_TimersUITestsLaunchTests.swift */; };
 		715F42E6297C40A6003DD749 /* CombineSchedulers in Frameworks */ = {isa = PBXBuildFile; productRef = 715F42E5297C40A6003DD749 /* CombineSchedulers */; };
 		715F42E9297C40E6003DD749 /* FreshDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715F42E8297C40E6003DD749 /* FreshDataProvider.swift */; };
+		715F42EC297DB15C003DD749 /* CombineExt in Frameworks */ = {isa = PBXBuildFile; productRef = 715F42EB297DB15C003DD749 /* CombineExt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +60,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				715F42EC297DB15C003DD749 /* CombineExt in Frameworks */,
 				715F42E6297C40A6003DD749 /* CombineSchedulers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -158,6 +160,7 @@
 			name = "TDD-Async-Combine-And-Timers";
 			packageProductDependencies = (
 				715F42E5297C40A6003DD749 /* CombineSchedulers */,
+				715F42EB297DB15C003DD749 /* CombineExt */,
 			);
 			productName = "TDD-Async-Combine-And-Timers";
 			productReference = 715F42B1297C406E003DD749 /* TDD-Async-Combine-And-Timers.app */;
@@ -233,6 +236,7 @@
 			mainGroup = 715F42A8297C406E003DD749;
 			packageReferences = (
 				715F42E4297C40A6003DD749 /* XCRemoteSwiftPackageReference "combine-schedulers" */,
+				715F42EA297DB15C003DD749 /* XCRemoteSwiftPackageReference "CombineExt" */,
 			);
 			productRefGroup = 715F42B2297C406E003DD749 /* Products */;
 			projectDirPath = "";
@@ -626,6 +630,14 @@
 				version = 0.9.1;
 			};
 		};
+		715F42EA297DB15C003DD749 /* XCRemoteSwiftPackageReference "CombineExt" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/CombineCommunity/CombineExt";
+			requirement = {
+				kind = exactVersion;
+				version = 1.8.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -633,6 +645,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 715F42E4297C40A6003DD749 /* XCRemoteSwiftPackageReference "combine-schedulers" */;
 			productName = CombineSchedulers;
+		};
+		715F42EB297DB15C003DD749 /* CombineExt */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 715F42EA297DB15C003DD749 /* XCRemoteSwiftPackageReference "CombineExt" */;
+			productName = CombineExt;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
