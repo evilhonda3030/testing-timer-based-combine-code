@@ -53,15 +53,19 @@ final class FreshDataProviderImpl: FreshDataProvider {
     // MARK: - Public methods
 
     func freshData() -> AnyPublisher<Int, Never> {
-        Publishers
+        var cachedSuccessfullResponse: Int?
+
+        return Publishers
             .firingEveryTenMinutesOfHourTimer(
                 scheduler: timerScheduler,
                 nowDateProviding: nowDateProviding
             )
             .flatMap { [apiRequestPerformer] in
                 apiRequestPerformer.request()
-                    .replaceError(with: 0)
+                    .handleEvents(receiveOutput: { cachedSuccessfullResponse = $0 })
+                    .replaceError(with: cachedSuccessfullResponse ?? 0)
             }
+            .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
@@ -78,26 +82,52 @@ private extension Publishers {
         nowDateProviding: NowDateProviding.Type
     ) -> AnyPublisher<Void, Never> {
         let now = nowDateProviding.now
-        let nowTimestamp = TimeInterval(Int(now.timeIntervalSince1970)) // extract seconds only
+        let elapsedSeconds = now.elapsedSecondsFromTheBeginningOfHour()
+        let currentSegment = elapsedSeconds.currentSegment
 
-        let hours = TimeInterval(Int(nowTimestamp / .hour))
-        let elapsedSeconds = nowTimestamp - (hours * .hour)
-        let currentSegment = TimeInterval(Int(elapsedSeconds / 10.0 * .minute))
+        let secondsToNextSegment = .segmentTimeInterval - (elapsedSeconds - currentSegment * .segmentTimeInterval)
 
-        let secondsToNextSegment = elapsedSeconds - currentSegment * 10.0 * .minute
-
-        return Just(())
-            .delay(for: .seconds(secondsToNextSegment), scheduler: scheduler)
-            .flatMap {
-                Publishers.Timer(every: .seconds(10.0 * .minute), scheduler: scheduler)
-                    .autoconnect()
-                    .map { _ in }
-                    .prepend(())
-                    .eraseToAnyPublisher()
-            }
-            .prepend(())
+        let timer: AnyPublisher<Void, Never> = Publishers.Timer(every: .seconds(.segmentTimeInterval), scheduler: scheduler)
+            .autoconnect()
+            .map { _ in }
             .eraseToAnyPublisher()
+
+        if secondsToNextSegment == .segmentTimeInterval || secondsToNextSegment == 0 {
+            return timer
+                .prepend(())
+                .eraseToAnyPublisher()
+        } else {
+            return Just(())
+                .delay(for: .seconds(secondsToNextSegment), scheduler: scheduler)
+                .flatMap {
+                    timer
+                        .prepend(())
+                        .eraseToAnyPublisher()
+                }
+                .prepend(())
+                .eraseToAnyPublisher()
+        }
     }
+}
+
+private extension Date {
+    func elapsedSecondsFromTheBeginningOfHour() -> Int {
+        let timestamp = Int(timeIntervalSince1970) // extract seconds only
+
+        let hours = timestamp / .hour
+        return timestamp - (hours * .hour)
+    }
+}
+
+private extension Int {
+    var currentSegment: Int { self / .segmentTimeInterval }
+
+    static let segmentTimeInterval = 10 * .minute
+}
+
+private extension Int {
+    static let hour = Int(TimeInterval.hour)
+    static let minute = Int(TimeInterval.minute)
 }
 
 private extension TimeInterval {

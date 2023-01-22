@@ -5,32 +5,104 @@
 //  Created by Egor Mikhailov on 21/01/2023.
 //
 
+import Combine
+import CombineSchedulers
 import XCTest
 @testable import TDD_Async_Combine_And_Timers
 
+struct NowDateProvidingMock: NowDateProviding {
+    static var _now: Date!
+    static var now: Date { _now }
+}
+
+class ApiRequestPerformerMock: ApiRequestPerformer {
+    func request() -> AnyPublisher<Int, Error> {
+        Just(response)
+            .setFailureType(to: Error.self)
+            .eraseToAnyPublisher()
+    }
+
+    var response: Int!
+}
+
 final class TDD_Async_Combine_And_TimersTests: XCTestCase {
+    func testTimerFires6TimesAnHour() throws {
+        var firingCount = 0
+        nowDateProviding._now = Date(timeIntervalSince1970: 0.0)
+        apiRequestPerformer.response = 0
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+        let canc = dataProvider.freshData()
+            .map { _ in }
+            .sink { firingCount += 1 }
+
+        XCTAssertEqual(firingCount, 1)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 2)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 3)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 4)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 5)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 6)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 7)
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+    func testTimerNotFiringSomewhereInTheMiddleOfSegment() throws {
+        var firingCount = 0
+        nowDateProviding._now = Date(timeIntervalSince1970: 0.0)
+        apiRequestPerformer.response = 0
+
+        let canc = dataProvider.freshData()
+            .map { _ in }
+            .sink { firingCount += 1 }
+
+        XCTAssertEqual(firingCount, 1)
+        scheduler.advance(by: 300)
+        XCTAssertEqual(firingCount, 1)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 2)
     }
 
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+    func testTimerFiringAccuratelyIfNowIsntAlignedWithTheBorderOfSegment() throws {
+        var firingCount = 0
+        let shift = 355.55
+        nowDateProviding._now = Date(timeIntervalSince1970: shift)
+        apiRequestPerformer.response = 0
+
+        let canc = dataProvider.freshData()
+            .map { _ in }
+            .sink { firingCount += 1 }
+
+        let toNextSegment = 600 - Int(shift)
+
+        XCTAssertEqual(firingCount, 1)
+        scheduler.advance(by: .seconds(toNextSegment))
+        XCTAssertEqual(firingCount, 2)
+        scheduler.advance(by: 600)
+        XCTAssertEqual(firingCount, 3)
     }
 
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
+    func testResponseIsReceived() throws {
+        nowDateProviding._now = Date(timeIntervalSince1970: 0.0)
+        apiRequestPerformer.response = 10
+        var response: Int?
+
+        let canc = dataProvider.freshData()
+            .sink { response = $0 }
+
+        XCTAssertEqual(response, apiRequestPerformer.response)
     }
 
+    private lazy var dataProvider = FreshDataProviderImpl(
+        apiRequestPerformer: apiRequestPerformer,
+        timerScheduler: scheduler.eraseToAnyScheduler(),
+        nowDateProviding: nowDateProviding
+    )
+
+    private let nowDateProviding = NowDateProvidingMock.self
+    private let apiRequestPerformer = ApiRequestPerformerMock()
+    private let scheduler = DispatchQueue.test
 }
